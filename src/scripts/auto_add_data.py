@@ -82,5 +82,4 @@ def add_data():
                 session.commit()
         print('данные добавлены')
 
-
 add_data()
