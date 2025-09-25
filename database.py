@@ -14,4 +14,4 @@ metadata = MetaData()
 Base: DeclarativeMeta = declarative_base(metadata=metadata)
 
 engine = create_engine(DATABASE_URL)
-sync_session_maker = sessionmaker(engine, expire_on_commit=False)
+session_maker = sessionmaker(engine, expire_on_commit=False)

@@ -14,8 +14,7 @@ class BuildingsModel(Base):
     id = Column(Uuid, primary_key=True)
 
     address = Column(String, nullable=False)
-    latitude = Column(String, nullable=False)
-    longitude = Column(String, nullable=False)
+    latitude_longitude = Column(String, nullable=False)
 
 class ActivitiesModels(Base):
 

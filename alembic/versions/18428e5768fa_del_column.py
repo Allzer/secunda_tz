@@ -1,8 +1,8 @@
-"""создание таблиц
+"""del column
 
-Revision ID: 1183214d5294
+Revision ID: 18428e5768fa
 Revises: 
-Create Date: 2025-09-25 13:26:28.551564
+Create Date: 2025-09-25 13:55:47.602620
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '1183214d5294'
+revision: str = '18428e5768fa'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -30,8 +30,7 @@ def upgrade() -> None:
     op.create_table('buildings',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('address', sa.String(), nullable=False),
-    sa.Column('latitude', sa.String(), nullable=False),
-    sa.Column('longitude', sa.String(), nullable=False),
+    sa.Column('latitude_longitude', sa.String(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('organizations',
