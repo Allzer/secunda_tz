@@ -17,56 +17,70 @@ def add_data():
         for key in keys:
             activities_id = dg.gen_uuid()
             activities = ActivitiesModels(
-                id = activities_id,
-                parent_id = None,
-                name = key,
+                id=activities_id,
+                parent_id=None,
+                name=key,
             )
             session.add(activities)
             session.commit()
 
             buildings_id = dg.gen_uuid()
             buildings = BuildingsModel(
-                id = buildings_id,
-                address = dg.gen_adres(),
-                latitude_longitude = dg.gen_latitude_longitude()
+                id=buildings_id,
+                address=dg.gen_adres(),
+                latitude_longitude=dg.gen_latitude_longitude()
             )
             session.add(buildings)
             session.commit()
 
             for i in activity_name[key]:
+                child_id = dg.gen_uuid()
                 child_activites = ActivitiesModels(
-                    id = dg.gen_uuid(),
-                    parent_id = activities_id,
-                    name = i
+                    id=child_id,
+                    parent_id=activities_id,
+                    name=i
                 )
                 session.add(child_activites)
+                session.commit()
 
                 organizations_id = dg.gen_uuid()
                 organizations = OrganizationsModels(
-                    id = organizations_id,
-                    buildings_id = buildings_id,
-                    name = dg.gen_name(),
+                    id=organizations_id,
+                    buildings_id=buildings_id,
+                    name=dg.gen_name(),
                 )
                 session.add(organizations)
                 session.commit()
 
                 organization_phones_id = dg.gen_uuid()
                 organization_phones = OrganizationPhonesModels(
-                    id = organization_phones_id,
-                    organization_id = organizations_id,
-                    phone_number = dg.gen_phone_number(),
+                    id=organization_phones_id,
+                    organization_id=organizations_id,
+                    phone_number=dg.gen_phone_number(),
                 )
                 session.add(organization_phones)
                 session.commit()
 
-                organization_activities_id = dg.gen_uuid()
-                organization_activities = OrganizationActivitiesModels(
-                    id = organization_activities_id,
-                    organization_id = organizations_id,
-                    activity_id = activities_id,
-                )
-                session.add(organization_activities)
+                choice = random.choice(['child', 'parent', 'both'])
+                to_create = []
+                if choice == 'child' or choice == 'both':
+                    org_act_id = dg.gen_uuid()
+                    to_create.append(OrganizationActivitiesModels(
+                        id=org_act_id,
+                        organization_id=organizations_id,
+                        activity_id=child_id,
+                    ))
+                if choice == 'parent' or choice == 'both':
+                    org_act_id = dg.gen_uuid()
+                    to_create.append(OrganizationActivitiesModels(
+                        id=org_act_id,
+                        organization_id=organizations_id,
+                        activity_id=activities_id,
+                    ))
+                for oa in to_create:
+                    session.add(oa)
                 session.commit()
-        print('данный добавлены')
+        print('данные добавлены')
+
 
 add_data()
