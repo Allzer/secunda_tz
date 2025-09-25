@@ -5,11 +5,8 @@ def gen_uuid():
     return uuid.uuid4()
 
 def gen_adres():
-    city = ['Москва', 'Саратов', 'Сызрань', 'Тула', 'Питербург']
-    street = ['2-й Кабельный пр', 'Малый Купаввенский пр', 'Безымянная Улица', 'Улица Разумовского']
-    home = ['д.5', 'д.32/1', 'д.37', 'д.13']
-    result = '{}, {}, {}'.format(random.choice(city), random.choice(street), random.choice(home))
-    return result
+    result = ['Питербург, Малый Купаввенский пр, д.5', 'Саратов, 2-й Кабельный пр, д.37', 'Сызрань, Улица Разумовского, д.13']
+    return random.choice(result)
 
 def gen_phone_number():
     number_part = ''.join(random.choices('0123456789', k=10))
@@ -43,4 +40,3 @@ def gen_activites():
             'Еда': ['Убой скота', 'Получение молока', 'Разведение новых животных'],
             'Продукты' : ['Продажа продуктов', 'Продажа сигарет', 'Продажа алкоголя']
         }
-activity_name = gen_activites()

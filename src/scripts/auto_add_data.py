@@ -24,6 +24,15 @@ def add_data():
             session.add(activities)
             session.commit()
 
+            buildings_id = dg.gen_uuid()
+            buildings = BuildingsModel(
+                id = buildings_id,
+                address = dg.gen_adres(),
+                latitude_longitude = dg.gen_latitude_longitude()
+            )
+            session.add(buildings)
+            session.commit()
+
             for i in activity_name[key]:
                 child_activites = ActivitiesModels(
                     id = dg.gen_uuid(),
@@ -31,15 +40,6 @@ def add_data():
                     name = i
                 )
                 session.add(child_activites)
-
-                buildings_id = dg.gen_uuid()
-                buildings = BuildingsModel(
-                    id = buildings_id,
-                    address = dg.gen_adres(),
-                    latitude_longitude = dg.gen_latitude_longitude()
-                )
-                session.add(buildings)
-                session.commit()
 
                 organizations_id = dg.gen_uuid()
                 organizations = OrganizationsModels(
