@@ -7,5 +7,7 @@ router = APIRouter(
 )
 
 @router.get('/')
-def get_builds():
+def get_builds(builds_name):
+    '''список всех организаций находящихся в конкретном здании'''
+
     return 'good'
