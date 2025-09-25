@@ -15,3 +15,12 @@ Base: DeclarativeMeta = declarative_base(metadata=metadata)
 
 engine = create_engine(DATABASE_URL)
 session_maker = sessionmaker(engine, expire_on_commit=False)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
