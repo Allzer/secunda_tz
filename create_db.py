@@ -2,7 +2,7 @@ import psycopg2
 from sqlalchemy.engine.url import make_url
 from config import DB_USER, DB_PASS, DB_HOST, DB_PORT, DB_NAME
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 def create_sync_database():
     url = make_url(DATABASE_URL)
@@ -17,13 +17,11 @@ def create_sync_database():
     
     conn = None
     try:
-        # Подключаемся к базе данных postgres для проверки существования целевой БД
         conn = psycopg2.connect(**conn_params)
-        conn.autocommit = True  # Включаем autocommit для создания БД
-        
+        conn.autocommit = True
+
         cursor = conn.cursor()
         
-        # Проверяем существование базы данных
         cursor.execute(
             "SELECT 1 FROM pg_database WHERE datname = %s",
             (url.database,)
