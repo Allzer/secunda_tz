@@ -1,10 +1,11 @@
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import SessionLocal, get_db
+from api.scripts import haversine_m, parse_latlon_decimal
+from database import get_db
 from src.models.models import *
 from sqlalchemy.orm import aliased
 
@@ -14,7 +15,7 @@ router = APIRouter(
 )
 
 @router.get('/org_in_builds')
-def get_builds(org_address: str, session: Session = Depends(get_db)): 
+def get_org_in_builds(org_address: str, session: Session = Depends(get_db)): 
     '''список всех организаций находящихся в конкретном здании'''
     try:
         result_list = []
@@ -40,7 +41,7 @@ def get_builds(org_address: str, session: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail='Не удалось выполнить чтение из БД')
 
 @router.get('/org_by_activiys')
-def get_builds(org_activitys: str, session: Session = Depends(get_db)):
+def get_org_by_activiys(org_activities: str, session: Session = Depends(get_db)):
     '''список всех организаций, которые относятся к указанному виду деятельности'''
     try:
         result_list = []
@@ -50,7 +51,7 @@ def get_builds(org_activitys: str, session: Session = Depends(get_db)):
             .select_from(OrganizationActivitiesModels)
             .join(ActivitiesModels, OrganizationActivitiesModels.activity_id == ActivitiesModels.id)
             .join(OrganizationsModels, OrganizationActivitiesModels.organization_id == OrganizationsModels.id)
-            .where(ActivitiesModels.name == org_activitys)
+            .where(ActivitiesModels.name == org_activities)
             .distinct()
         )
 
@@ -66,25 +67,6 @@ def get_builds(org_activitys: str, session: Session = Depends(get_db)):
     except Exception as er:
         print(er)
         raise HTTPException(status_code=500, detail='Не удалось выполнить чтение из БД')
-    
-def parse_latlon_decimal(value: str) -> Tuple[float, float]:
-    try:
-        lat_s, lon_s = [p.strip() for p in value.split(",")]
-        return float(lat_s), float(lon_s)
-    except Exception as e:
-        raise ValueError(f"Invalid lat/lon format: {value}") from e
-
-
-def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Возвращает расстояние в метрах между двумя точками (Haversine)."""
-    R = 6371000.0
-    phi1 = math.radians(lat1)
-    phi2 = math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
 
 @router.get("/geo_search_by_center")
 def geo_search_by_center(
