@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, get_db
-from src.models.models import * #ActivitiesModels, BuildingsModel, OrganizationsModels
+from src.models.models import *
 
 
 router = APIRouter(
@@ -14,7 +14,7 @@ router = APIRouter(
 )
 
 @router.post('/org_in_builds')
-def get_builds(org_address: str, session: Session = Depends(get_db)): #builds_name, 
+def get_builds(org_address: str, session: Session = Depends(get_db)): 
     '''список всех организаций находящихся в конкретном здании'''
     try:
         result_list = []
@@ -93,15 +93,6 @@ def geo_search_by_center(
     limit: int = Query(200, description="максимум результатов для защиты от слишком больших ответов"),
     session = Depends(get_db),
     ) -> Dict:
-    """Упрощённая ручка: используется один центр (building_id или address) и радиус (radius_m).
-
-    Правила:
-      - Передавайте либо building_id, либо address; если переданы оба — приоритет у building_id.
-      - radius_m обязателен и задаёт зону поиска вокруг центра.
-      - Поиск организаций делается внутри найденных зданий.
-
-    Возвращает: center (id/address/coords), radius_m, count, results (список зданий с организациями и distance_m).
-    """
     try:
         # ----- определяем центр -----
         center_lat: Optional[float] = None
@@ -117,8 +108,6 @@ def geo_search_by_center(
         center_address = getattr(center_b, "address", None)
         center_lat, center_lon = parse_latlon_decimal(center_b.latitude_longitude)
         
-
-        # ----- собираем здания и фильтруем по radius_m -----
         stmt = select(BuildingsModel)
         buildings = session.execute(stmt).scalars().all()
         results: List[Dict] = []
