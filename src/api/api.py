@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import SessionLocal, get_db
 from src.models.models import *
-
+from sqlalchemy.orm import aliased
 
 router = APIRouter(
     prefix="/v1/secunda",
@@ -195,3 +195,187 @@ def get_organization_by_id(organization_id: str, session: Session = Depends(get_
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail='Не удалось выполнить чтение из БД')
+    
+@router.get('/org_by_activity_tree')
+def get_organizations_by_activity_tree(
+    activity_name: str = Query(..., description="Название вида деятельности на первом уровне дерева"),
+    session: Session = Depends(get_db)
+):
+    try:
+        ActivityParent = aliased(ActivitiesModels, name='parent')
+        ActivityChild = aliased(ActivitiesModels, name='child')
+        
+        activity_hierarchy = (
+            select(ActivityParent.id)
+            .where(ActivityParent.name == activity_name)
+            .where(ActivityParent.parent_id.is_(None))
+            .cte(recursive=True, name='activity_hierarchy')
+        )
+        
+        activity_hierarchy_union = activity_hierarchy.union_all(
+            select(ActivityChild.id)
+            .select_from(ActivityChild)
+            .join(activity_hierarchy, ActivityChild.parent_id == activity_hierarchy.c.id)
+        )
+        
+        all_activity_ids = select(activity_hierarchy_union.c.id)
+        
+        organizations_query = (
+            select(
+                OrganizationsModels.id,
+                OrganizationsModels.name,
+                BuildingsModel.address,
+                ActivitiesModels.name.label('activity_name')
+            )
+            .select_from(OrganizationsModels)
+            .join(OrganizationActivitiesModels, OrganizationsModels.id == OrganizationActivitiesModels.organization_id)
+            .join(ActivitiesModels, OrganizationActivitiesModels.activity_id == ActivitiesModels.id)
+            .join(BuildingsModel, OrganizationsModels.buildings_id == BuildingsModel.id)
+            .where(ActivitiesModels.id.in_(all_activity_ids))
+            .order_by(OrganizationsModels.name, ActivitiesModels.name)
+        )
+        
+        result = session.execute(organizations_query).all()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Вид деятельности '{activity_name}' не найден или не имеет дочерних элементов"
+            )
+        
+        organizations_dict = {}
+        for org_id, org_name, address, activity_name in result:
+            if org_id not in organizations_dict:
+                organizations_dict[org_id] = {
+                    'id': str(org_id),
+                    'name': org_name,
+                    'address': address,
+                    'activities': []
+                }
+            organizations_dict[org_id]['activities'].append(activity_name)
+        
+        response = list(organizations_dict.values())
+        
+        return {
+            'search_activity': activity_name,
+            'count': len(response),
+            'organizations': response
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail='Не удалось выполнить поиск по дереву видов деятельности')
+
+@router.get('/activity_tree')
+def get_activity_tree(
+    parent_name: Optional[str] = Query(None, description="Название родительского вида деятельности"),
+    session: Session = Depends(get_db)
+):
+    try:
+        if parent_name:
+            parent_activity = session.execute(
+                select(ActivitiesModels).where(
+                    ActivitiesModels.name == parent_name, 
+                    ActivitiesModels.parent_id.is_(None)
+                )
+            ).scalar_one_or_none()
+            
+            if not parent_activity:
+                raise HTTPException(status_code=404, detail="Родительский вид деятельности не найден")
+            
+            ParentActivity = aliased(ActivitiesModels, name='parent')
+            ChildActivity = aliased(ActivitiesModels, name='child')
+            
+            activity_tree = (
+                select(ParentActivity.id, ParentActivity.name, ParentActivity.parent_id)
+                .where(ParentActivity.id == parent_activity.id)
+                .cte(recursive=True, name='activity_tree')
+            )
+            
+            activity_tree_union = activity_tree.union_all(
+                select(ChildActivity.id, ChildActivity.name, ChildActivity.parent_id)
+                .select_from(ChildActivity)
+                .join(activity_tree, ChildActivity.parent_id == activity_tree.c.id)
+            )
+            
+            tree_result = session.execute(
+                select(activity_tree_union.c.id, activity_tree_union.c.name, activity_tree_union.c.parent_id)
+                .order_by(activity_tree_union.c.name)
+            ).all()
+            
+            return {
+                'parent_activity': parent_name,
+                'tree': [{'id': str(row.id), 'name': row.name, 'parent_id': str(row.parent_id) if row.parent_id else None} 
+                        for row in tree_result]
+            }
+        else:
+            root_activities = session.execute(
+                select(ActivitiesModels).where(ActivitiesModels.parent_id.is_(None))
+                .order_by(ActivitiesModels.name)
+            ).scalars().all()
+            
+            return {
+                'root_activities': [{'id': str(act.id), 'name': act.name} for act in root_activities]
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail='Не удалось получить дерево видов деятельности')
+    
+@router.get('/organization/search')
+def search_organizations_by_name(
+    name: str = Query(..., description="Название организации для поиска"),
+    limit: int = Query(100, description="Максимальное количество результатов"),
+    session: Session = Depends(get_db)
+):
+    try:
+        query = (
+            select(OrganizationsModels, BuildingsModel)
+            .join(BuildingsModel, OrganizationsModels.buildings_id == BuildingsModel.id)
+            .where(OrganizationsModels.name.ilike(f"%{name}%"))
+            .limit(limit)
+        )
+        
+        results = session.execute(query).all()
+        
+        organizations_list = []
+        for org, building in results:
+            phones_query = select(OrganizationPhonesModels.phone_number).where(
+                OrganizationPhonesModels.organization_id == org.id
+            )
+            phones = session.execute(phones_query).scalars().all()
+            
+            activities_query = (
+                select(ActivitiesModels.name)
+                .select_from(OrganizationActivitiesModels)
+                .join(ActivitiesModels, OrganizationActivitiesModels.activity_id == ActivitiesModels.id)
+                .where(OrganizationActivitiesModels.organization_id == org.id)
+            )
+            activities = session.execute(activities_query).scalars().all()
+            
+            organization_data = {
+                'id': str(org.id),
+                'name': org.name,
+                'building': {
+                    'id': str(building.id),
+                    'address': building.address,
+                    'latitude_longitude': building.latitude_longitude
+                },
+                'phones': phones,
+                'activities': activities
+            }
+            organizations_list.append(organization_data)
+        
+        return {
+            'search_query': name,
+            'count': len(organizations_list),
+            'organizations': organizations_list
+        }
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail='Не удалось выполнить поиск организаций')
