@@ -13,7 +13,7 @@ router = APIRouter(
     tags=["clients"]
 )
 
-@router.post('/org_in_builds')
+@router.get('/org_in_builds')
 def get_builds(org_address: str, session: Session = Depends(get_db)): 
     '''список всех организаций находящихся в конкретном здании'''
     try:
@@ -39,7 +39,7 @@ def get_builds(org_address: str, session: Session = Depends(get_db)):
         print(er)
         raise HTTPException(status_code=500, detail='Не удалось выполнить чтение из БД')
 
-@router.post('/org_by_activiys')
+@router.get('/org_by_activiys')
 def get_builds(org_activitys: str, session: Session = Depends(get_db)):
     '''список всех организаций, которые относятся к указанному виду деятельности'''
     try:
@@ -146,3 +146,52 @@ def geo_search_by_center(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка поиска by_center: {e}")
+    
+@router.get('/organization/{organization_id}')
+def get_organization_by_id(organization_id: str, session: Session = Depends(get_db)):
+    '''получение информации об организации по её идентификатору'''
+    try:
+        query = (
+            select(OrganizationsModels, BuildingsModel)
+            .join(BuildingsModel, OrganizationsModels.buildings_id == BuildingsModel.id)
+            .where(OrganizationsModels.id == organization_id)
+        )
+        result = session.execute(query).first()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Организация не найдена")
+        
+        org, building = result
+
+        phones_query = select(OrganizationPhonesModels.phone_number).where(
+            OrganizationPhonesModels.organization_id == organization_id
+        )
+        phones = session.execute(phones_query).scalars().all()
+
+        activities_query = (
+            select(ActivitiesModels.name)
+            .select_from(OrganizationActivitiesModels)
+            .join(ActivitiesModels, OrganizationActivitiesModels.activity_id == ActivitiesModels.id)
+            .where(OrganizationActivitiesModels.organization_id == organization_id)
+        )
+        activities = session.execute(activities_query).scalars().all()
+
+        response = {
+            'id': str(org.id),
+            'name': org.name,
+            'building': {
+                'id': str(building.id),
+                'address': building.address,
+                'latitude_longitude': building.latitude_longitude
+            },
+            'phones': phones,
+            'activities': activities
+        }
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail='Не удалось выполнить чтение из БД')
