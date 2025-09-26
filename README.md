@@ -1,5 +1,5 @@
 # secunda_tz
+Открываем терминал и пишем:
 
-Для активации venv
-  
-    source venv/bin/activate
+    docker compose up --build
+
