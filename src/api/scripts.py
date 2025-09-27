@@ -20,3 +20,10 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     a = math.sin(dphi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
+
+def bbox_for_radius(lat: float, lon: float, radius_m: float):
+    """Возвращает (min_lat, max_lat, min_lon, max_lon) для радиуса в метрах."""
+    R = 6371000.0
+    lat_delta = (radius_m / R) * (180.0 / math.pi)
+    lon_delta = (radius_m / R) * (180.0 / math.pi) / max(math.cos(math.radians(lat)), 1e-6)
+    return lat - lat_delta, lat + lat_delta, lon - lon_delta, lon + lon_delta

@@ -1,10 +1,9 @@
-import math
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.scripts import haversine_m, parse_latlon_decimal
+from src.api.scripts import bbox_for_radius, haversine_m, parse_latlon_decimal
 from database import get_db
 from src.models.models import *
 from sqlalchemy.orm import aliased
@@ -70,55 +69,80 @@ def get_org_by_activiys(org_activities: str, session: Session = Depends(get_db))
 
 @router.get("/geo_search_by_center")
 def geo_search_by_center(
-    building_id: Optional[str] = Query(None, description="id здания — будет использовано как центр"),
+    building_id: str = Query(..., description="id здания — будет использовано как центр"),
     radius_m: float = Query(..., description="радиус в метрах — обязательный параметр"),
     limit: int = Query(200, description="максимум результатов для защиты от слишком больших ответов"),
-    session = Depends(get_db),
-    ) -> Dict:
+    session: Session = Depends(get_db),
+) -> Dict:
+    """
+    Поиск зданий и организаций в радиусе относительно здания по building_id.
+    """
     try:
-        # ----- определяем центр -----
-        center_lat: Optional[float] = None
-        center_lon: Optional[float] = None
-        center_id: Optional[str] = None
-        center_address: Optional[str] = None
-
-        stmt = select(BuildingsModel).where(BuildingsModel.id == building_id)
-        center_b = session.execute(stmt).scalar_one_or_none()
+        center_b = session.execute(select(BuildingsModel).where(BuildingsModel.id == building_id)).scalar_one_or_none()
         if center_b is None:
             raise HTTPException(status_code=404, detail="building_id не найден в БД")
-        center_id = str(center_b.id)
-        center_address = getattr(center_b, "address", None)
-        center_lat, center_lon = parse_latlon_decimal(center_b.latitude_longitude)
-        
-        stmt = select(BuildingsModel)
+
+        try:
+            center_lat, center_lon = parse_latlon_decimal(center_b.latitude_longitude)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Некорректные координаты у центра")
+
+        min_lat, max_lat, min_lon, max_lon = bbox_for_radius(center_lat, center_lon, radius_m)
+
+        stmt = select(BuildingsModel).where(BuildingsModel.latitude_longitude.isnot(None))
         buildings = session.execute(stmt).scalars().all()
-        results: List[Dict] = []
+
+        found = []
+        found_building_ids = []
+
         for b in buildings:
             try:
                 b_lat, b_lon = parse_latlon_decimal(b.latitude_longitude)
             except Exception:
                 continue
+
+            if not (min_lat <= b_lat <= max_lat and min_lon <= b_lon <= max_lon):
+                continue
+
             dist = haversine_m(center_lat, center_lon, b_lat, b_lon)
             if dist <= radius_m:
-                orgs_stmt = select(OrganizationsModels).where(OrganizationsModels.buildings_id == b.id)
-                orgs = session.execute(orgs_stmt).scalars().all()
-                orgs_list = [{"org_id": str(o.id), "org_name": o.name} for o in orgs]
-                results.append({
+                found.append({
                     "building_id": str(b.id),
                     "address": getattr(b, "address", None),
                     "latitude": b_lat,
                     "longitude": b_lon,
                     "distance_m": round(dist, 2),
-                    "organizations": orgs_list,
                 })
+                found_building_ids.append(b.id)
 
-            if len(results) >= limit:
+            if len(found) >= limit:
                 break
 
-        results.sort(key=lambda x: x["distance_m"])
+        if not found:
+            return {
+                "center": {"building_id": str(center_b.id), "address": getattr(center_b, "address", None),
+                           "latitude": center_lat, "longitude": center_lon},
+                "radius_m": radius_m,
+                "count": 0,
+                "results": []
+            }
+
+        orgs_stmt = select(OrganizationsModels).where(OrganizationsModels.buildings_id.in_(found_building_ids))
+        orgs = session.execute(orgs_stmt).scalars().all()
+
+        orgs_by_building = {}
+        for o in orgs:
+            orgs_by_building.setdefault(str(o.buildings_id), []).append({"org_id": str(o.id), "org_name": o.name})
+
+        for r in found:
+            r["organizations"] = orgs_by_building.get(r["building_id"], [])
+
+        found.sort(key=lambda x: x["distance_m"])
+        results = found[:limit]
 
         return {
-            "center": {"building_id": center_id, "address": center_address, "latitude": center_lat, "longitude": center_lon},
+            "center": {"building_id": str(center_b.id), "address": getattr(center_b, "address", None),
+                       "latitude": center_lat, "longitude": center_lon},
             "radius_m": radius_m,
             "count": len(results),
             "results": results,
@@ -127,7 +151,7 @@ def geo_search_by_center(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка поиска by_center: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка поиска by_center")
     
 @router.get('/organization/{organization_id}')
 def get_organization_by_id(organization_id: str, session: Session = Depends(get_db)):
